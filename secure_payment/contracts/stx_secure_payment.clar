@@ -319,3 +319,54 @@
     )
   )
 )
+(define-public (return-instrument (instrument-id uint))
+  (let ((instrument (unwrap! (get-instrument instrument-id) err-invalid-instrument))
+        (current-renter (get renter instrument)))
+    
+    (asserts! (is-eq (get status instrument) "rented") err-instrument-unavailable)
+    (asserts! (is-eq (some tx-sender) current-renter) err-unauthorized)
+    
+    (begin
+      ;; Update instrument status
+      (map-set instruments
+        { instrument-id: instrument-id }
+        (merge instrument 
+          { 
+            status: "available",
+            renter: none,
+            rental-expiry: none
+          }
+        )
+      )
+      
+      ;; Record return transaction
+      (let ((tx-id (var-get next-tx-id)))
+        (map-set transactions
+          { tx-id: tx-id }
+          {
+            user: tx-sender,
+            instrument-id: instrument-id,
+            amount: u0,
+            type: TYPE-RENTAL-RETURN,
+            status: STATUS-COMPLETED,
+            rental-period-days: none,
+            timestamp: block-height,
+            expiry: none
+          }
+        )
+        (var-set next-tx-id (+ tx-id u1))
+        (ok tx-id)
+      )
+    )
+  )
+)
+
+;; System Functions
+(define-public (mark-overdue-rentals)
+  (begin
+    (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+    ;; In a real implementation, this would iterate through instruments and mark overdue ones
+    ;; For this example, we leave this as a placeholder function since Clarity doesn't support iteration
+    (ok true)
+  )
+)
