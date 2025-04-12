@@ -143,3 +143,79 @@
     )
   )
 )
+
+;; Payment and Balance Functions
+(define-public (deposit (amount uint))
+  (begin
+    (asserts! (> amount u0) err-invalid-amount)
+    (let ((current-balance (get-balance tx-sender)))
+      (map-set balances tx-sender (+ current-balance amount))
+      
+      ;; Record the deposit transaction
+      (let ((tx-id (var-get next-tx-id)))
+        (map-set transactions
+          { tx-id: tx-id }
+          {
+            user: tx-sender,
+            instrument-id: u0, ;; No specific instrument for deposits
+            amount: amount,
+            type: TYPE-DEPOSIT,
+            status: STATUS-COMPLETED,
+            rental-period-days: none,
+            timestamp: block-height,
+            expiry: none
+          }
+        )
+        (var-set next-tx-id (+ tx-id u1))
+        (ok tx-id)
+      )
+    )
+  )
+)
+
+(define-public (purchase-instrument (instrument-id uint))
+  (let ((instrument (unwrap! (get-instrument instrument-id) err-invalid-instrument))
+        (price (get purchase-price instrument))
+        (balance (get-balance tx-sender)))
+    
+    (asserts! (is-eq (get status instrument) "available") err-instrument-unavailable)
+    (asserts! (>= balance price) err-insufficient-balance)
+    
+    (begin
+      ;; Update user balance
+      (map-set balances tx-sender (- balance price))
+      
+      ;; Update instrument ownership
+      (map-set instruments
+        { instrument-id: instrument-id }
+        (merge instrument 
+          { 
+            status: "owned",
+            owner: (some tx-sender),
+            renter: none,
+            rental-expiry: none
+          }
+        )
+      )
+      
+      ;; Record transaction
+      (let ((tx-id (var-get next-tx-id)))
+        (map-set transactions
+          { tx-id: tx-id }
+          {
+            user: tx-sender,
+            instrument-id: instrument-id,
+            amount: price,
+            type: TYPE-PURCHASE,
+            status: STATUS-COMPLETED,
+            rental-period-days: none,
+            timestamp: block-height,
+            expiry: none
+          }
+        )
+        (var-set next-tx-id (+ tx-id u1))
+        (ok tx-id)
+      )
+    )
+  )
+)
