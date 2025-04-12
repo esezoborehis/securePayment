@@ -219,3 +219,103 @@
     )
   )
 )
+
+(define-public (rent-instrument (instrument-id uint) (rental-days uint))
+  (let ((instrument (unwrap! (get-instrument instrument-id) err-invalid-instrument))
+        (daily-fee (get daily-rental-fee instrument))
+        (total-fee (* daily-fee rental-days))
+        (balance (get-balance tx-sender)))
+    
+    (asserts! (is-eq (get status instrument) "available") err-instrument-unavailable)
+    (asserts! (>= balance total-fee) err-insufficient-balance)
+    (asserts! (and (> rental-days u0) (<= rental-days u365)) err-invalid-rental-period)
+    
+    (begin
+      ;; Update user balance
+      (map-set balances tx-sender (- balance total-fee))
+      
+      ;; Update instrument status
+      (map-set instruments
+        { instrument-id: instrument-id }
+        (merge instrument 
+          { 
+            status: "rented",
+            renter: (some tx-sender),
+            rental-expiry: (some (+ block-height (* rental-days u144))) ;; Approximately 144 blocks per day
+          }
+        )
+      )
+      
+      ;; Record transaction
+      (let ((tx-id (var-get next-tx-id))
+            (expiry (+ block-height (* rental-days u144))))
+        (map-set transactions
+          { tx-id: tx-id }
+          {
+            user: tx-sender,
+            instrument-id: instrument-id,
+            amount: total-fee,
+            type: TYPE-RENTAL,
+            status: STATUS-ACTIVE,
+            rental-period-days: (some rental-days),
+            timestamp: block-height,
+            expiry: (some expiry)
+          }
+        )
+        (var-set next-tx-id (+ tx-id u1))
+        (ok tx-id)
+      )
+    )
+  )
+)
+
+(define-public (extend-rental (instrument-id uint) (additional-days uint))
+  (let ((instrument (unwrap! (get-instrument instrument-id) err-invalid-instrument))
+        (daily-fee (get daily-rental-fee instrument))
+        (total-fee (* daily-fee additional-days))
+        (balance (get-balance tx-sender))
+        (current-renter (get renter instrument))
+        (current-expiry (get rental-expiry instrument)))
+    
+    (asserts! (is-eq (get status instrument) "rented") err-instrument-unavailable)
+    (asserts! (is-eq (some tx-sender) current-renter) err-unauthorized)
+    (asserts! (is-some current-expiry) err-rental-expired)
+    (asserts! (>= balance total-fee) err-insufficient-balance)
+    (asserts! (and (> additional-days u0) (<= additional-days u365)) err-invalid-rental-period)
+    
+    (begin
+      ;; Update user balance
+      (map-set balances tx-sender (- balance total-fee))
+      
+      ;; Update instrument rental expiry
+      (map-set instruments
+        { instrument-id: instrument-id }
+        (merge instrument 
+          { 
+            rental-expiry: (some (+ (unwrap! current-expiry u0) (* additional-days u144)))
+          }
+        )
+      )
+      
+      ;; Record extension transaction
+      (let ((tx-id (var-get next-tx-id))
+            (new-expiry (+ (unwrap! current-expiry u0) (* additional-days u144))))
+        (map-set transactions
+          { tx-id: tx-id }
+          {
+            user: tx-sender,
+            instrument-id: instrument-id,
+            amount: total-fee,
+            type: TYPE-RENTAL-EXTENSION,
+            status: STATUS-COMPLETED,
+            rental-period-days: (some additional-days),
+            timestamp: block-height,
+            expiry: (some new-expiry)
+          }
+        )
+        (var-set next-tx-id (+ tx-id u1))
+        (ok tx-id)
+      )
+    )
+  )
+)
