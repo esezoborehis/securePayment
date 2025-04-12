@@ -102,3 +102,44 @@
     )
   )
 )
+;; Administrative Functions
+(define-public (register-instrument 
+  (name (string-utf8 100)) 
+  (category (string-ascii 50)) 
+  (daily-rental-fee uint) 
+  (purchase-price uint))
+  
+  (begin
+    (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+    (let ((instrument-id (var-get next-instrument-id)))
+      (map-set instruments
+        { instrument-id: instrument-id }
+        {
+          name: name,
+          category: category,
+          daily-rental-fee: daily-rental-fee,
+          purchase-price: purchase-price,
+          status: "available",
+          owner: none,
+          renter: none,
+          rental-expiry: none
+        }
+      )
+      (var-set next-instrument-id (+ instrument-id u1))
+      (ok instrument-id)
+    )
+  )
+)
+
+(define-public (update-instrument-status (instrument-id uint) (new-status (string-ascii 20)))
+  (begin
+    (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+    (let ((instrument (unwrap! (get-instrument instrument-id) err-invalid-instrument)))
+      (map-set instruments
+        { instrument-id: instrument-id }
+        (merge instrument { status: new-status })
+      )
+      (ok instrument-id)
+    )
+  )
+)
