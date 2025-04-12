@@ -370,3 +370,71 @@
     (ok true)
   )
 )
+(define-public (process-refund (tx-id uint))
+  (begin
+    (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+    (let ((transaction (unwrap! (get-transaction tx-id) err-transaction-not-found)))
+      (asserts! (or (is-eq (get status transaction) STATUS-COMPLETED) 
+                    (is-eq (get status transaction) STATUS-ACTIVE))
+                err-invalid-status)
+      
+      ;; Return funds to the user
+      (let ((user (get user transaction))
+            (amount (get amount transaction))
+            (user-balance (get-balance user)))
+        
+        (map-set balances user (+ user-balance amount))
+        
+        ;; Update transaction status
+        (map-set transactions
+          { tx-id: tx-id }
+          (merge transaction { status: STATUS-REFUNDED })
+        )
+        
+        ;; If this is a rental, make the instrument available again
+        (if (or (is-eq (get type transaction) TYPE-RENTAL) 
+                (is-eq (get type transaction) TYPE-RENTAL-EXTENSION))
+            (let ((instrument-id (get instrument-id transaction))
+                  (instrument (unwrap! (get-instrument instrument-id) err-invalid-instrument)))
+              (map-set instruments
+                { instrument-id: instrument-id }
+                (merge instrument 
+                  { 
+                    status: "available",
+                    renter: none,
+                    rental-expiry: none
+                  }
+                )
+              )
+            )
+            true
+        )
+        
+        (ok tx-id)
+      )
+    )
+  )
+)
+
+;; Query functions for user convenience
+(define-read-only (get-user-transactions (user principal))
+  ;; In a real implementation, this would return all transactions for a user
+  ;; Simplified since Clarity doesn't support returning arrays directly
+  (ok "Query user transactions via indexer")
+)
+
+(define-read-only (get-available-instruments)
+  ;; In a real implementation, this would return all available instruments
+  ;; Simplified for the same reason as above
+  (ok "Query available instruments via indexer")
+)
+
+(define-read-only (get-user-rentals (user principal))
+  ;; In a real implementation, this would return all active rentals for a user
+  (ok "Query user rentals via indexer")
+)
+
+(define-read-only (get-user-owned-instruments (user principal))
+  ;; In a real implementation, this would return all instruments owned by a user
+  (ok "Query user owned instruments via indexer")
+)
