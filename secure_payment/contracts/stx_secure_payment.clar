@@ -59,3 +59,46 @@
     expiry: (optional uint)
   }
 )
+;; Data Variables
+(define-data-var next-tx-id uint u1)
+(define-data-var next-instrument-id uint u1)
+
+;; Read-only Functions
+(define-read-only (get-balance (user principal))
+  (default-to u0 (map-get? balances user))
+)
+
+(define-read-only (get-transaction (tx-id uint))
+  (map-get? transactions { tx-id: tx-id })
+)
+
+(define-read-only (get-instrument (instrument-id uint))
+  (map-get? instruments { instrument-id: instrument-id })
+)
+
+(define-read-only (get-next-tx-id)
+  (var-get next-tx-id)
+)
+
+(define-read-only (get-next-instrument-id)
+  (var-get next-instrument-id)
+)
+
+(define-read-only (is-instrument-available (instrument-id uint))
+  (let ((instrument (map-get? instruments { instrument-id: instrument-id })))
+    (and 
+      (is-some instrument)
+      (is-eq (get status (unwrap! instrument { status: "none" })) "available")
+    )
+  )
+)
+
+(define-read-only (is-rental-active (instrument-id uint))
+  (let ((instrument (map-get? instruments { instrument-id: instrument-id })))
+    (and 
+      (is-some instrument)
+      (is-eq (get status (unwrap! instrument { status: "none" })) "rented")
+      (>= (default-to u0 (get rental-expiry (unwrap! instrument { rental-expiry: none }))) block-height)
+    )
+  )
+)
