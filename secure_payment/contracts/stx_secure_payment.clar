@@ -438,3 +438,9 @@
   ;; In a real implementation, this would return all instruments owned by a user
   (ok "Query user owned instruments via indexer")
 )
+
+(define-read-only (get-user-owned-instruments (user principal))
+  ;; In a real implementation, this would return all instruments owned by a user
+  (ok "Query user owned instruments via indexer")
+)
+
